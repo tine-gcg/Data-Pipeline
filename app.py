@@ -166,14 +166,12 @@ def extract_excel():
 """TRANSFORM"""
 def transform_to_sql(excel_file):
     """Transform Excel file into SQL insert statements for all sheets."""
-    # Read the Excel file into a dictionary of DataFrames (one per sheet)
-    dfs = pd.read_excel(excel_file, sheet_name=None)  # sheet_name=None loads all sheets
-    
-    sql_files = []  # Store SQL file names for each sheet
+    dfs = pd.read_excel(excel_file, sheet_name=None)  
+    sql_files = [] 
     
     # Iterate through each sheet in the Excel file
     for sheet_name, df in dfs.items():
-        table_name = sheet_name  # Use sheet name as table name
+        table_name = f'"{sheet_name}"'  # Use sheet name as table name
         print(f"Processing sheet: {sheet_name}")
         
         sql_statements = []
