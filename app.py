@@ -76,6 +76,19 @@ def clean_name(name):
         name = '_' + name
     return name.lower()
 
+def deduplicate_columns(columns):
+    seen = {}
+    new_columns = []
+    for col in columns:
+        col_clean = col.strip().lower()  # optional: standardize names (march vs March)
+        if col_clean in seen:
+            seen[col_clean] += 1
+            new_columns.append(f"{col_clean}_{seen[col_clean]}")
+        else:
+            seen[col_clean] = 0
+            new_columns.append(col_clean)
+    return new_columns
+
 def transform_and_load_to_sqlite(excel_file, sqlite_db_name="database.sqlite"):
     dfs = pd.read_excel(excel_file, sheet_name=None)
     conn = sqlite3.connect(sqlite_db_name)
@@ -90,7 +103,10 @@ def transform_and_load_to_sqlite(excel_file, sqlite_db_name="database.sqlite"):
         table_name = f"{base_filename_clean}_{sheet_name_clean}"
 
         # Clean column names
-        df.columns = [clean_name(col) for col in df.columns]
+        df.columns = [col.strip() for col in df.columns]    # Step 1: strip spaces
+        df.columns = deduplicate_columns(df.columns)        # Step 2: deduplicate duplicates
+        df.columns = [clean_name(col) for col in df.columns] # Step 3: clean special characters
+
         df.dropna(how='all', inplace=True)
         df["row_hash"] = df.apply(generate_row_hash, axis=1)
 
