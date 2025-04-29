@@ -1,4 +1,11 @@
+base64
 pandas
+hashlib
+os
+re
+sqlite3
 streamlit
+tempfile
+openpyxl
+Office365-REST-Python-Client
 streamlit-option-menu
-office365-rest-python-client
