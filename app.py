@@ -67,7 +67,11 @@ def generate_row_hash(row):
 #     return preview_data
 
 def clean_name(name):
+    # Replace any non-word character (anything not a letter, number, or underscore) with underscores
     name = re.sub(r'\W+', '_', name)
+    # Remove leading underscores just to be clean
+    name = name.lstrip('_')
+    # If after cleaning it starts with a digit, add an underscore in front
     if name and name[0].isdigit():
         name = '_' + name
     return name.lower()
