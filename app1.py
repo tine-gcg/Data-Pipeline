@@ -5,10 +5,10 @@ import os
 import re
 import sqlite3
 import streamlit as st
+import tempfile
 from office365.runtime.auth.authentication_context import AuthenticationContext
 from office365.sharepoint.client_context import ClientContext
 from streamlit_option_menu import option_menu
-from streamlit_extras.stylable_container import stylable_container
 
 USERNAME = os.getenv("SHAREPOINT_USERNAME", "big@globalcomfortgroup.com")
 PASSWORD = os.getenv("SHAREPOINT_PASSWORD", "Fxckbvrn0ut!!!")
@@ -100,8 +100,52 @@ def convert_tab():
     
 def combine_tab(): 
     st.subheader("Combine Excel Files")
-    # Placeholder for combine functionality
-    st.write("This feature is under development.")
+
+    uploaded_files = st.file_uploader(
+        "",
+        type=["xlsx", "xls"],
+        accept_multiple_files=True
+    )
+
+    if uploaded_files:
+        combined_df = pd.DataFrame()
+
+        for file in uploaded_files:
+            # Read all sheets from each uploaded file
+            dfs = pd.read_excel(file, sheet_name=None)
+
+            for sheet_name, df in dfs.items():
+                df['source_file'] = file.name 
+                df['source_sheet'] = sheet_name
+                combined_df = pd.concat([combined_df, df], ignore_index=True)
+
+        st.success(f"Successfully combined {len(uploaded_files)} files!")
+
+        # Show combined data
+        st.subheader("Preview of Combined Data")
+        st.dataframe(combined_df)
+
+        if st.button("Create SQLite and Upload to SharePoint"):
+            with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as tmpfile:
+                sqlite_path = tmpfile.name
+
+            # Save combined_df into SQLite
+            conn = sqlite3.connect(sqlite_path)
+            combined_df.to_sql('combined_data', conn, index=False, if_exists='replace')
+            conn.close()
+
+            st.success("SQLite database created successfully!")
+
+            # Now upload the SQLite file to SharePoint
+            upload_sqlite_to_sharepoint(SITE_URL, FOLDER_PATH, sqlite_path, USERNAME, PASSWORD)
+
+            # Optionally delete the temp file after upload
+            os.remove(sqlite_path)
+
+            st.success("SQLite database uploaded to SharePoint successfully!")
+        
+    else:
+        st.info("Please upload Excel files to start combining.")
 
 def embed_tab():
     st.subheader("Embed Files into SQLite Database")
@@ -135,36 +179,6 @@ def embed_tab():
         conn.close()
 
         st.success(f"Successfully embedded file: {file_name}")
-    
-    st.divider()  # A visual divider line (optional)
-
-# --- Viewing Section ---
-    st.subheader("List of Embedded Files")
-    # st.write("Click on the file to download.")
-    conn = sqlite3.connect("database.sqlite")
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='embedded_files';")
-    if cursor.fetchone():
-        cursor.execute("SELECT id, file_name, file_blob FROM embedded_files")
-        rows = cursor.fetchall()
-
-        if rows:
-            for file_id, file_name, file_blob in rows:
-                # Encode file_blob to base64
-                b64 = base64.b64encode(file_blob).decode()
-
-                # Create downloadable link
-                href = f'<a href="data:application/octet-stream;base64,{b64}" download="{file_name}">📄 {file_name}</a>'
-                st.markdown(href, unsafe_allow_html=True)
-
-        else:
-            st.info("No files embedded yet.")
-    else:
-        st.info("No files embedded yet.")
-
-    conn.close()
-
 
 def view_tab():
     st.subheader("View SQLite Database")
@@ -199,11 +213,42 @@ def view_tab():
             st.error(f"Error loading table {selected_table}: {str(e)}")
         finally:
             conn.close()
+    
+    st.divider()  # A visual divider line (optional)
+
+    # --- Viewing Section ---
+    st.subheader("List of Embedded Files")
+    # st.write("Click on the file to download.")
+    
+    conn = sqlite3.connect("database.sqlite")
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='embedded_files';")
+    if cursor.fetchone():
+        cursor.execute("SELECT id, file_name, file_blob FROM embedded_files")
+        rows = cursor.fetchall()
+
+        if rows:
+            for file_id, file_name, file_blob in rows:
+                # Encode file_blob to base64
+                b64 = base64.b64encode(file_blob).decode()
+
+                # Create downloadable link
+                href = f'<a href="data:application/octet-stream;base64,{b64}" download="{file_name}">📄 {file_name}</a>'
+                st.markdown(href, unsafe_allow_html=True)
+
+        else:
+            st.info("No files embedded yet.")
+    else:
+        st.info("No files embedded yet.")
+
+    conn.close()
 
 def main():
     selected = option_menu( 
         menu_title=None, 
-        options=["Convert", "Combine", "Embed", "View"],
+        # options=["Convert", "Combine", "Embed", "View"],
+        options=["Convert", "Embed", "View"],
         icons=["file-earmark-spreadsheet", "file-earmark-plus", "file-earmark-lock", "eye"],
         menu_icon="cast",
         default_index=0,  
@@ -212,85 +257,15 @@ def main():
 
     if selected == "Convert":
         convert_tab()
-    elif selected == "Combine":
-        combine_tab()
+    # elif selected == "Combine":
+    #     combine_tab()
     elif selected == "Embed":
         embed_tab()
     elif selected == "View":
         view_tab()
     
-
-# def main():
-#     # st.title("Excel to SQLite to SharePoint Uploader")
-#     if 'active_tab' not in st.session_state:
-#         st.session_state.active_tab = "Convert"
-
-#     # Adding a top navigation bar
-#     st.markdown("""
-#     <style>
-#     .top-bar {
-#         background-color: #2C3E50;
-#         padding: 10px;
-#         color: white;
-#         text-align: center;
-#         font-size: 20px;
-#         font-weight: bold;
-#         display: flex;
-#         justify-content: space-between;
-#         align-items: center;
-#     }
-#     .top-bar a {
-#         color: white;
-#         text-decoration: none;
-#         padding: 10px 15px;
-#         font-size: 18px;
-#     }
-#     .top-bar a:hover {
-#         background-color: #34495E;
-#     }
-#     </style>
-#     <div class="top-bar">
-#         <div>
-#             <a href="#">Convert</a>
-#             <a href="#">View</a>
-#             </div>
-#     </div>
-#     """, unsafe_allow_html=True)
-
-#     # Main content section for different tabs
-#     # tab = st.experimental_get_query_params().get("tab", ["Convert"])[0]
-    
-#     query_params = st.query_params
-#     tab = query_params.get("tab", ["Convert"])[0]  # Default to 'Convert' if no tab is specified
-#     st.session_state.active_tab = tab  # Update session state
-
-#     # Display the content for the active tab
-#     if st.session_state.active_tab == "Convert":
-#         convert_tab()
-#     elif st.session_state.active_tab == "View":
-#         view_tab()
-
-#     # excel_file = upload_excel()
-
-#     # if excel_file:
-#     #     sqlite_path = "database.sqlite"
-#     #     preview_data = transform_and_load_to_sqlite(excel_file, sqlite_db_name=sqlite_path)
-
-#     #     st.success("Excel file has been converted into SQLite database.")
-#     #     st.subheader("Preview of the converted sheets:")
-
-#     #     # Display previews
-#     #     for sheet_name, df_preview in preview_data.items():
-#     #         st.write(f"**Sheet: {sheet_name}**")
-#     #         st.dataframe(df_preview)the 
-
-#     #     # After displaying preview, show upload button
-#     #     if st.button("Upload SQLite file to SharePoint"):
-#     #         upload_sqlite_to_sharepoint(SITE_URL, FOLDER_PATH, sqlite_path, USERNAME, PASSWORD)
-
-#     # if st.button("View Entire SQLite Database"):
-#     #     view_database(sqlite_db_name="database.sqlite")
-
 if __name__ == "__main__":
+    st.set_page_config(page_title="SQLite Database Manager", layout="wide")
     main()
+    
     
