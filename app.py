@@ -10,10 +10,10 @@ from office365.runtime.auth.authentication_context import AuthenticationContext
 from office365.sharepoint.client_context import ClientContext
 from streamlit_option_menu import option_menu
 
-USERNAME = os.getenv("SHAREPOINT_USERNAME", "big@globalcomfortgroup.com")
-PASSWORD = os.getenv("SHAREPOINT_PASSWORD", "Fxckbvrn0ut!!!")
-SITE_URL = "https://globalcomfortgroup0.sharepoint.com/sites/BIGDatabase"
-FOLDER_PATH = "Shared Documents"
+USERNAME = st.secrets["sharepoint"]["username"]
+PASSWORD = st.secrets["sharepoint"]["password"]
+SITE_URL = st.secrets["sharepoint"]["site_url"]
+FOLDER_PATH = st.secrets["sharepoint"]["folder_path"]
 
 # """EXTRACT"""
 def upload_excel():
@@ -22,49 +22,10 @@ def upload_excel():
     return excel_file
 
 # """TRANSFORM"""
-# def clean_column_name(name):
-#     return re.sub(r'\W+0', '_', name).strip('_').lower()
-
 def generate_row_hash(row):
     """Generates a hash from row contents."""
     row_str = "|".join(map(str, row.values))
     return hashlib.md5(row_str.encode()).hexdigest()
-
-# def transform_and_load_to_sqlite(excel_file, sqlite_db_name="database.sqlite"):
-#     """Loads Excel sheets into SQLite DB with row_hash as a unique identifier."""
-#     dfs = pd.read_excel(excel_file, sheet_name=None)
-#     conn = sqlite3.connect(sqlite_db_name)
-
-#     # Get base filename (used in table name to prevent conflicts)
-#     base_filename = os.path.splitext(os.path.basename(excel_file.name))[0]
-#     base_filename_clean = base_filename.strip().replace(" ", "_").lower()
-
-#     # Prepend an underscore to base_filename if it starts with a digit
-#     if base_filename_clean[0].isdigit():  # If base_filename starts with a digit
-#         base_filename_clean = f"_{base_filename_clean}"
-
-#     preview_data = {}
-
-#     for sheet_name, df in dfs.items():
-#         # Clean the sheet_name for use in the table name
-#         sheet_name_clean = sheet_name.strip().replace(" ", "_").lower()
-        
-#         # Use the base_filename_clean (which has been modified if necessary) and append the cleaned sheet name
-#         table_name = f"{base_filename_clean}_{sheet_name_clean}"
-
-#         # Clean column names
-#         df.columns = [clean_column_name(col) for col in df.columns]
-#         df.dropna(how='all', inplace=True)
-#         df["row_hash"] = df.apply(generate_row_hash, axis=1)
-
-#         # Create table with row_hash and insert data (replace = full overwrite)
-#         df.to_sql(table_name, conn, if_exists='replace', index=False)
-
-#         preview_data[sheet_name] = df.head()
-
-#     conn.commit()
-#     conn.close()
-#     return preview_data
 
 def clean_name(name):
     # Replace any non-word character (anything not a letter, number, or underscore) with underscores
