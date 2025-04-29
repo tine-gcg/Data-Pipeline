@@ -1,0 +1,4 @@
+pandas
+streamlit
+streamlit-option-menu
+office365-rest-python-client
