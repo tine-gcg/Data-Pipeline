@@ -3,3 +3,4 @@ streamlit
 openpyxl
 Office365-REST-Python-Client
 streamlit-option-menu
+xlsxwriter
