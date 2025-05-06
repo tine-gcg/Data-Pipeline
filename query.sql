@@ -13,3 +13,6 @@ DROP TABLE IF EXISTS "2024_-_e10_eurotel_vivaldi_araneta_psychodemo_survey_data_
 DROP TABLE IF EXISTS "sheet1";
 DROP TABLE IF EXISTS "sheet2";
 DROP TABLE IF EXISTS "sheet3";
+
+DROP TABLE IF EXISTS "sqlite_sequence";
+DROP TABLE IF EXISTS "file_links";

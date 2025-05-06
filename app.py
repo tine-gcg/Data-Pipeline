@@ -3,11 +3,13 @@ import pandas as pd
 import hashlib
 import io
 import os
+import pdfkit
 import re
 import sqlite3
 import streamlit as st
 from office365.runtime.auth.authentication_context import AuthenticationContext
 from office365.sharepoint.client_context import ClientContext
+from st_aggrid import AgGrid, GridOptionsBuilder
 from streamlit_option_menu import option_menu
 
 USERNAME = st.secrets["sharepoint"]["username"]
@@ -62,7 +64,6 @@ def transform_and_load_to_sqlite(excel_file, SQLITE_FILENAME):
 
     preview_data = {}
     
-
     for sheet_name, df in dfs.items():
         sheet_name_clean = clean_name(sheet_name)
         table_name = f"{base_filename_clean}_{sheet_name_clean}"
@@ -95,6 +96,43 @@ def upload_sqlite_to_sharepoint(site_url, folder_url, db_path, username, passwor
             st.success(f"Uploaded {name} to SharePoint.")
     else:
         print("Authentication failed.")
+
+def list_tab():
+    conn = sqlite3.connect(SQLITE_FILENAME)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS file_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            link TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+
+    with st.container(border=True):
+        st.markdown("### ➕ Add File Link Entry")
+        filename = st.text_input("File Name")
+        file_link = st.text_input("File Link (URL)")
+
+        if st.button("Add to List"):
+            if filename and file_link:
+                cursor.execute("INSERT INTO file_links (filename, link) VALUES (?, ?)", (filename, file_link))
+                conn.commit()
+                st.success(f"Added '{filename}' to the list.")
+                st.rerun()
+            else:
+                st.error("Please fill in both the file name and link.")
+
+    with st.container(border=True):
+        st.markdown("### File List")
+
+        df_links = pd.read_sql("SELECT filename, link FROM file_links ORDER BY id DESC", conn)
+        if df_links.empty:
+            st.info("No entries yet.")
+        else:
+            st.dataframe(df_links, use_container_width=True)
+
+    conn.close()
 
 def convert_tab():
     st.subheader("Convert Excel to SQLite")
@@ -196,56 +234,52 @@ def combine_excel_files(conn):
                     st.success(f"Uploaded `{SQLITE_FILENAME}` to SharePoint.")
             else:
                 conn.close()
-                
+            
+
 def append_excel_to_sqlite(conn):
     st.subheader("Append Excel Data to Existing SQLite Table")
 
-    # Connect and list tables first
-    conn = sqlite3.connect(SQLITE_FILENAME)
+    # List existing tables
     existing_tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)["name"].tolist()
 
     if not existing_tables:
         st.error("No existing tables found in the database.")
-        conn.close()
         return
 
     selected_table = st.selectbox("Select a table to append data to", existing_tables)
     file = st.file_uploader("Upload Excel File to Append", type=["xlsx", "xls"], key="append_file")
 
-    if file and selected_table:
-        # Load destination table
-        target_df = pd.read_sql(f"SELECT * FROM '{selected_table}'", conn)
-        target_headers = [col.strip().lower() for col in target_df.columns]
-
-        # Read uploaded Excel and lowercase sheet names
+    if file:
+        # Read all sheets from the uploaded Excel file
         dfs = pd.read_excel(file, sheet_name=None)
-        dfs = {sheet.lower(): df for sheet, df in dfs.items()}
+        sheet_names = list(dfs.keys())
 
-        sheet_to_append = st.selectbox("Select sheet to append", list(dfs.keys()))
+        selected_sheet = st.selectbox("Select a sheet to append", sheet_names)
 
-        if sheet_to_append:
-            source_df = dfs[sheet_to_append]
+        if selected_table and selected_sheet:
+            source_df = dfs[selected_sheet]
             source_df.columns = [col.strip().lower() for col in source_df.columns]
-            
+
+            # Load target table schema
+            target_df = pd.read_sql(f"SELECT * FROM '{selected_table}'", conn)
+            target_headers = [col.strip().lower() for col in target_df.columns]
+
             if 'row_hash' not in source_df.columns:
-                # If not, generate a row_hash for the new data
                 source_df['row_hash'] = source_df.apply(generate_row_hash, axis=1)
 
             if list(source_df.columns) != target_headers:
                 st.error("Header mismatch. Cannot append.")
-                conn.close()
                 return
 
-            # Clean and deduplicate column names before appending
+            # Clean and deduplicate
             source_df.columns = [clean_name(col) for col in source_df.columns]
             source_df.columns = deduplicate_columns(source_df.columns)
 
-            # Append to existing table
+            # Append to DB
             source_df.to_sql(selected_table, conn, if_exists="append", index=False)
             conn.commit()
-            conn.close()
 
-            st.success(f"Appended data from '{sheet_to_append}' to table '{selected_table}'")
+            st.success(f"Appended data from sheet '{selected_sheet}' to table '{selected_table}'")
 
             with open(SQLITE_FILENAME, "rb") as f:
                 st.download_button("Download updated SQLite file", f, file_name=SQLITE_FILENAME)
@@ -253,6 +287,7 @@ def append_excel_to_sqlite(conn):
             if st.button("Upload updated DB to SharePoint"):
                 upload_sqlite_to_sharepoint(SITE_URL, FOLDER_PATH, SQLITE_FILENAME, USERNAME, PASSWORD)
                 st.success(f"Uploaded `{SQLITE_FILENAME}` to SharePoint.")
+
 
 def combine_tab():
     mode = st.radio("Select action", ["Combine Two Excel Files", "Combine Excel to Existing Table"])
@@ -266,39 +301,6 @@ def combine_tab():
             append_excel_to_sqlite(conn)
 
         conn.close()
-
-def embed_tab():
-    st.subheader("Embed Files into SQLite Database")
-
-    uploaded_file = st.file_uploader("")
-
-    if uploaded_file:
-        file_name = uploaded_file.name
-        file_data = uploaded_file.read()  # This will read the file as bytes (BLOB)
-
-        # Connect to SQLite
-        conn = sqlite3.connect(SQLITE_FILENAME)
-        cursor = conn.cursor()
-
-        # Create a table if it doesn't exist
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS embedded_files (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_name TEXT,
-                file_blob BLOB
-            )
-        ''')
-
-        # Insert file into the table
-        cursor.execute('''
-            INSERT INTO embedded_files (file_name, file_blob) 
-            VALUES (?, ?)
-        ''', (file_name, file_data))
-
-        conn.commit()
-        conn.close()
-
-        st.success(f"Successfully embedded file: {file_name}")
 
 def view_tab():
     st.subheader("View SQLite Database")
@@ -315,54 +317,33 @@ def view_tab():
         st.info("No tables found in the database.")
         return
 
-    # User selects a table to view
     selected_table = st.selectbox("Select a table to view:", tables)
 
     if selected_table:
         conn = sqlite3.connect(SQLITE_FILENAME)
-        cursor = conn.cursor()
 
         try:
-            cursor.execute(f"SELECT * FROM '{selected_table}'")  # Always wrap table names in quotes
-            rows = cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
+            df = pd.read_sql(f"SELECT * FROM '{selected_table}'", conn)
 
-            df = pd.DataFrame(rows, columns=columns)
-            st.dataframe(df)
+            if not df.empty:
+                st.markdown(f"### Preview of `{selected_table}`")
+
+                gb = GridOptionsBuilder.from_dataframe(df)
+                gb.configure_pagination(paginationAutoPageSize=True)
+                gb.configure_default_column(editable=False, groupable=True)
+                gb.configure_side_bar()  
+                gridOptions = gb.build()
+
+                AgGrid(df, gridOptions=gridOptions, enable_enterprise_modules=False, fit_columns_on_grid_load=True)
+
+            else:
+                st.info(f"No data found in `{selected_table}`.")
         except Exception as e:
             st.error(f"Error loading table {selected_table}: {str(e)}")
         finally:
             conn.close()
-    
-    st.divider() 
 
-    # --- Viewing Section ---
-    st.subheader("List of Embedded Files")
-    # st.write("Click on the file to download.")
-    
-    conn = sqlite3.connect(SQLITE_FILENAME)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='embedded_files';")
-    if cursor.fetchone():
-        cursor.execute("SELECT id, file_name, file_blob FROM embedded_files")
-        rows = cursor.fetchall()
-
-        if rows:
-            for file_id, file_name, file_blob in rows:
-                # Encode file_blob to base64
-                b64 = base64.b64encode(file_blob).decode()
-
-                # Create downloadable link
-                href = f'<a href="data:application/octet-stream;base64,{b64}" download="{file_name}">📄 {file_name}</a>'
-                st.markdown(href, unsafe_allow_html=True)
-
-        else:
-            st.info("No files embedded yet.")
-    else:
-        st.info("No files embedded yet.")
-
-    conn.close()
+    st.divider()
     
 def export_database_modal():
     password = st.text_input("Password", type="password", key="export_pw")
@@ -390,103 +371,173 @@ def export_database_modal():
             )
         else:
             st.error("Incorrect password.")
+            
+            
+@st.dialog("Export File Links")
+def export_file_links_modal():
+    conn = sqlite3.connect(SQLITE_FILENAME)
+    df = pd.read_sql("SELECT filename, link FROM file_links", conn)
+    conn.close()
 
+    if df.empty:
+        st.warning("The list is empty.")
+        return
+
+    export_format = st.radio("Select export format", ["Excel", "PDF"])
+
+    if export_format == "Excel":
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+            df.to_excel(writer, index=False, sheet_name="FileLinks")
+        st.download_button(
+            "Download Excel File",
+            data=buffer.getvalue(),
+            file_name="file_links.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    elif export_format == "PDF":
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.backends.backend_pdf import PdfPages
+
+            fig, ax = plt.subplots(figsize=(8, len(df) * 0.5 + 1))
+            ax.axis("off")
+            table = ax.table(cellText=df.values, colLabels=df.columns, cellLoc='left', loc='center')
+            table.auto_set_font_size(False)
+            table.set_fontsize(10)
+
+            pdf_buffer = io.BytesIO()
+            with PdfPages(pdf_buffer) as pdf:
+                pdf.savefig(fig, bbox_inches='tight')
+
+            st.download_button(
+                "Download PDF File",
+                data=pdf_buffer.getvalue(),
+                file_name="file_links.pdf",
+                mime="application/pdf"
+            )
+
+        except ImportError:
+            st.error("PDF export requires matplotlib. Install it with `pip install matplotlib`.")
+
+@st.dialog("Export Entire Database")
+def export_database_modal():
+    password = st.text_input("Enter password to export the database", type="password", key="export_pw")
+    if st.button("Submit", key="submit_export"):
+        if password == MANAGE_DB:
+            conn = sqlite3.connect(SQLITE_FILENAME)
+            tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)["name"].tolist()
+
+            if not tables:
+                st.warning("No tables found.")
+                return
+
+            excel_buffer = io.BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+                for table in tables:
+                    df = pd.read_sql(f'SELECT * FROM "{table}"', conn)
+                    df.to_excel(writer, sheet_name=table[:31], index=False)
+            conn.close()
+
+            st.download_button(
+                "Download Database as Excel",
+                data=excel_buffer.getvalue(),
+                file_name="database_export.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        else:
+            st.error("Incorrect password.")
+
+@st.dialog("Delete Entire Database")
 def delete_database_modal():
-    password = st.text_input("Password", type="password", key="delete_pw")
+    password = st.text_input("Enter password to delete the database", type="password", key="delete_pw")
     if st.button("Delete", key="submit_delete"):
         if password == MANAGE_DB:
             try:
                 os.remove(SQLITE_FILENAME)
                 st.success("Database deleted successfully.")
+                st.rerun()
             except Exception as e:
                 st.error(f"Error deleting database: {e}")
         else:
             st.error("Incorrect password.")
 
-def manage_db_tab():
-    st.subheader("Manage SQLite Database")
+@st.dialog("Delete Table")
+def delete_table_modal(table_name="file_links"):
+    password = st.text_input("Enter password to delete the table", type="password")
+    if st.button("Confirm Delete"):
+        if password == MANAGE_DB:
+            try:
+                conn = sqlite3.connect(SQLITE_FILENAME)
+                cursor = conn.cursor()
+                cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+                conn.commit()
+                conn.close()
+                st.success(f"Table '{table_name}' deleted.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error deleting table: {e}")
+        else:
+            st.error("Incorrect password. Table not deleted.")
 
+@st.dialog("Enter Admin Password")
+def manage_tab_password_modal():
+    password = st.text_input("Password", type="password", key="manage_tab_pw")
+    if st.button("Submit", key="manage_tab_submit"):
+        if password == MANAGE_DB:
+            st.session_state.manage_tab_access_granted = True
+            st.rerun()
+        else:
+            st.error("Incorrect password.")
+
+def manage_tab():
+    if not st.session_state.get("manage_tab_access_granted", False):
+        if st.button("🔐 Access Manage Tab"):
+            manage_tab_password_modal()
+        return
+
+    manage_tab_contents()
+
+def manage_tab_contents():
     if not os.path.exists(SQLITE_FILENAME):
         st.warning("Database does not exist.")
         return
 
     with st.container(border=True):
-        st.markdown("### Export Database")
+        st.markdown("### Export")
         if st.button("Export Database as Excel"):
             export_database_modal()
+        if st.button("Export File Links (Excel/PDF)"):
+            export_file_links_modal()
 
     with st.container(border=True):
-        st.markdown("### Delete Entire Database")
+        st.markdown("### Delete")
         if st.button("Delete Database"):
             delete_database_modal()
+        if st.button("Delete File Link Table"):
+            delete_table_modal("file_links")
     
-# def manage_db_tab():
-#     st.subheader("Manage SQLite Database")
-#     if not os.path.exists(SQLITE_FILENAME):
-#         st.warning("Database does not exist.")
-#         return
-
-#     # Export database to Excel
-#     with st.container(border=True):
-
-#         conn = sqlite3.connect(SQLITE_FILENAME)
-#         query = "SELECT name FROM sqlite_master WHERE type='table';"
-#         tables = pd.read_sql(query, conn)['name'].tolist()
-
-#         if not tables:
-#             st.info("No tables found in the database.")
-#         else:
-#             excel_buffer = io.BytesIO()
-#             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-#                 for table in tables:
-#                     df = pd.read_sql(f'SELECT * FROM "{table}"', conn)
-#                     df.to_excel(writer, sheet_name=table[:31], index=False)  # Excel limit: 31 char sheet name
-#                 # writer.save()
-#             conn.close()
-
-#             st.download_button(
-#                 "Download Entire Database as Excel",
-#                 data=excel_buffer.getvalue(),
-#                 file_name="database_export.xlsx",
-#                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-#             )
-
-#     # Delete database with password
-#     with st.container(border=True):
-#         st.markdown("### ❌ Delete Entire Database")
-
-#         password = st.text_input("Enter password to delete the database", type="password")
-#         if st.button("Delete Database"):
-#             if password == DELETE_DB:
-#                 try:
-#                     os.remove(SQLITE_FILENAME)
-#                     st.success("Database deleted successfully.")
-#                 except Exception as e:
-#                     st.error(f"Error deleting database: {e}")
-#             else:
-#                 st.error("Incorrect password. Database not deleted.")
-
 def main():
     selected = option_menu( 
         menu_title=None, 
-        options=["Convert", "Combine", "Embed", "View", "Manage"],
-        icons=["file-earmark-spreadsheet", "file-earmark-plus", "file-earmark-lock", "eye", "database"],
+        options=["List","Convert", "Combine", "View", "Manage"],
+        icons=["card-list","file-earmark-spreadsheet", "file-earmark-plus", "eye", "database"],
         menu_icon="cast",
         default_index=0,  
         orientation="horizontal"
-    )    
-
-    if selected == "Convert":
+    )  
+    
+    if selected == "List":  
+        list_tab()
+    elif selected == "Convert":
         convert_tab()
     elif selected == "Combine":
         combine_tab()
-    elif selected == "Embed":
-        embed_tab()
     elif selected == "View":
         view_tab()
     elif selected == "Manage":
-       manage_db_tab() 
-       
+       manage_tab() 
        
 if __name__ == "__main__":
     st.set_page_config(page_title="SQLite Database Manager", layout="wide")
