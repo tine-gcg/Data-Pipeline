@@ -149,26 +149,103 @@ def edit_link_modal(row_id: int, current_filename: str, current_link: str):
             conn.close()
             st.rerun()
 
+# def list_tab():
+#     conn = sqlite3.connect(SQLITE_FILENAME)
+#     cursor = conn.cursor()
+#     cursor.execute("""
+#         CREATE TABLE IF NOT EXISTS file_links (
+#             id INTEGER PRIMARY KEY AUTOINCREMENT,
+#             filename TEXT NOT NULL,
+#             link TEXT NOT NULL
+#         )
+#     """)
+#     conn.commit()
+
+#     # Add button
+#     if st.button("➕ Add File Link", key="add_link_main"):
+#         add_link_modal()
+
+#     # Search bar
+#     search_term = st.text_input("🔍 Search File List", key="search")
+
+#     # Fetch data including id
+#     df_links = pd.read_sql(
+#         "SELECT id, filename, link FROM file_links ORDER BY id DESC", conn
+#     )
+
+#     st.markdown("### 📄 File List")
+#     if df_links.empty:
+#         st.info("No entries yet.")
+#     else:
+#         # Apply search filter
+#         if search_term:
+#             mask = df_links.astype(str).apply(
+#                 lambda row: row.str.contains(search_term, case=False, na=False),
+#                 axis=1
+#             ).any(axis=1)
+#             df_links = df_links[mask]
+
+#         # Display each row with Edit/Delete buttons
+#         for row in df_links.itertuples():
+#             col1, col2, col3 = st.columns([4,1,1])
+#             with col1:
+#                 st.markdown(
+#                     f"**{row.filename}**: [Link]({row.link})", 
+#                     unsafe_allow_html=True
+#                 )
+#             with col2:
+#                 if st.button("✏️ Edit", key=f"editbtn_{row.id}"):
+#                     edit_link_modal(row.id, row.filename, row.link)
+#             with col3:
+#                 if st.button("🗑️ Delete", key=f"deletebtn_{row.id}"):
+#                     cursor.execute("DELETE FROM file_links WHERE id = ?", (row.id,))
+#                     conn.commit()
+#                     st.success("Deleted entry.")
+#                     st.rerun()
+
+#     conn.close()
+
+@st.dialog("🔒 Enter Admin Mode")
+def enter_admin_mode():
+    pw = st.text_input("Password", type="password", key="admin_pw")
+    if st.button("Unlock", key="unlock_btn"):
+        if pw == MANAGE_DB:
+            st.session_state.admin = True
+            st.success("Admin mode unlocked!")
+            st.rerun()
+        else:
+            st.error("Wrong password.")
+
+# —————— 2) Main List Tab ——————
 def list_tab():
+    # Initialize admin flag once
+    if "admin" not in st.session_state:
+        st.session_state.admin = False
+
+    # Button to enter admin mode
+    if not st.session_state.admin:
+        if st.button("🔑 Enter Admin Mode"):
+            enter_admin_mode()
+
     conn = sqlite3.connect(SQLITE_FILENAME)
     cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS file_links (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            filename TEXT NOT NULL,
-            link TEXT NOT NULL
-        )
-    """)
+    cursor.execute( 
+        """CREATE TABLE IF NOT EXISTS file_links (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               filename TEXT NOT NULL,
+               link TEXT NOT NULL
+           )"""
+    )
     conn.commit()
 
-    # Add button
+    # Add link (always allowed)
     if st.button("➕ Add File Link", key="add_link_main"):
         add_link_modal()
 
     # Search bar
     search_term = st.text_input("🔍 Search File List", key="search")
 
-    # Fetch data including id
+    # Load data
     df_links = pd.read_sql(
         "SELECT id, filename, link FROM file_links ORDER BY id DESC", conn
     )
@@ -177,7 +254,6 @@ def list_tab():
     if df_links.empty:
         st.info("No entries yet.")
     else:
-        # Apply search filter
         if search_term:
             mask = df_links.astype(str).apply(
                 lambda row: row.str.contains(search_term, case=False, na=False),
@@ -185,23 +261,24 @@ def list_tab():
             ).any(axis=1)
             df_links = df_links[mask]
 
-        # Display each row with Edit/Delete buttons
         for row in df_links.itertuples():
             col1, col2, col3 = st.columns([4,1,1])
             with col1:
                 st.markdown(
-                    f"**{row.filename}**: [Link]({row.link})", 
-                    unsafe_allow_html=True
+                    f"**{row.filename}**: [Link]({row.link})", unsafe_allow_html=True
                 )
-            with col2:
-                if st.button("✏️ Edit", key=f"editbtn_{row.id}"):
-                    edit_link_modal(row.id, row.filename, row.link)
-            with col3:
-                if st.button("🗑️ Delete", key=f"deletebtn_{row.id}"):
-                    cursor.execute("DELETE FROM file_links WHERE id = ?", (row.id,))
-                    conn.commit()
-                    st.success("Deleted entry.")
-                    st.rerun()
+
+            # — only show these if admin mode is on —
+            if st.session_state.admin:
+                with col2:
+                    if st.button("✏️ Edit", key=f"editbtn_{row.id}"):
+                        edit_link_modal(row.id, row.filename, row.link)
+                with col3:
+                    if st.button("🗑️ Delete", key=f"deletebtn_{row.id}"):
+                        cursor.execute("DELETE FROM file_links WHERE id = ?", (row.id,))
+                        conn.commit()
+                        st.success("Deleted entry.")
+                        st.rerun()
 
     conn.close()
 
@@ -227,7 +304,7 @@ def list_tab():
 #                 st.rerun()
 #             else:
 #                 st.error("Please fill in both fields.")
-
+                                                              
 #     with col2:
 #         if st.button("Cancel"):
 #             st.rerun()
