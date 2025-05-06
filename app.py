@@ -9,7 +9,6 @@ import sqlite3
 import streamlit as st
 from office365.runtime.auth.authentication_context import AuthenticationContext
 from office365.sharepoint.client_context import ClientContext
-from st_aggrid import AgGrid, GridOptionsBuilder
 from streamlit_option_menu import option_menu
 
 USERNAME = st.secrets["sharepoint"]["username"]
