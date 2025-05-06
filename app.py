@@ -96,56 +96,58 @@ def upload_sqlite_to_sharepoint(site_url, folder_url, db_path, username, passwor
     else:
         print("Authentication failed.")
  
-
-@st.dialog("Add File Link Entry")
+@st.dialog("➕ Add File Link Entry")
 def add_link_modal():
     conn = sqlite3.connect(SQLITE_FILENAME)
     cursor = conn.cursor()
-
-    filename = st.text_input("File Name", key="dialog_filename")
-    file_link = st.text_input("File Link (URL)", key="dialog_file_link")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Add"):
-            if filename and file_link:
-                cursor.execute(
-                    "INSERT INTO file_links (filename, link) VALUES (?, ?)",
-                    (filename, file_link)
-                )
-                conn.commit()
-                conn.close()
-                st.success(f"Added '{filename}' to the list.")
-                st.rerun()
-            else:
-                st.error("Please fill in both fields.")
-
-    with col2:
-        if st.button("Cancel"):
+    filename = st.text_input("File Name", key="new_filename")
+    file_link = st.text_input("File Link (URL)", key="new_link")
+    if st.button("Add", key="add_link_btn"):
+        if filename and file_link:
+            cursor.execute(
+                "INSERT INTO file_links (filename, link) VALUES (?, ?)",
+                (filename, file_link)
+            )
+            conn.commit()
+            conn.close()
+            st.success(f"Added '{filename}'")
             st.rerun()
+        else:
+            st.error("Please fill both fields.")
 
 @st.dialog("✏️ Edit File Link Entry")
 def edit_link_modal(row_id: int, current_filename: str, current_link: str):
     conn = sqlite3.connect(SQLITE_FILENAME)
     cursor = conn.cursor()
-    new_filename = st.text_input("File Name", value=current_filename, key=f"edit_fn_{row_id}")
-    new_link     = st.text_input("File Link (URL)", value=current_link,  key=f"edit_lk_{row_id}")
-    if st.button("Save"):
-        if new_filename and new_link:
-            cursor.execute(
-                "UPDATE file_links SET filename = ?, link = ? WHERE id = ?",
-                (new_filename, new_link, row_id)
-            )
-            conn.commit()
+    # Use row_id in keys
+    new_filename = st.text_input(
+        "File Name", 
+        value=current_filename, 
+        key=f"edit_fn_{row_id}"
+    )
+    new_link = st.text_input(
+        "File Link (URL)", 
+        value=current_link, 
+        key=f"edit_lk_{row_id}"
+    )
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Save", key=f"save_btn_{row_id}"):
+            if new_filename and new_link:
+                cursor.execute(
+                    "UPDATE file_links SET filename = ?, link = ? WHERE id = ?",
+                    (new_filename, new_link, row_id)
+                )
+                conn.commit()
+                conn.close()
+                st.success("Entry updated.")
+                st.rerun()
+            else:
+                st.error("Please fill both fields.")
+    with col2:
+        if st.button("Cancel", key=f"cancel_btn_{row_id}"):
             conn.close()
-            st.success("Entry updated.")
             st.rerun()
-        else:
-            st.error("Please fill both fields.")
-    if st.button("Cancel"):
-        conn.close()
-        st.rerun()
-
 
 def list_tab():
     conn = sqlite3.connect(SQLITE_FILENAME)
@@ -160,7 +162,7 @@ def list_tab():
     conn.commit()
 
     # Add button
-    if st.button("➕ Add File Link"):
+    if st.button("➕ Add File Link", key="add_link_main"):
         add_link_modal()
 
     # Search bar
@@ -178,7 +180,8 @@ def list_tab():
         # Apply search filter
         if search_term:
             mask = df_links.astype(str).apply(
-                lambda row: row.str.contains(search_term, case=False, na=False), axis=1
+                lambda row: row.str.contains(search_term, case=False, na=False),
+                axis=1
             ).any(axis=1)
             df_links = df_links[mask]
 
@@ -186,18 +189,123 @@ def list_tab():
         for row in df_links.itertuples():
             col1, col2, col3 = st.columns([4,1,1])
             with col1:
-                st.markdown(f"**{row.filename}**: [Link]({row.link})", unsafe_allow_html=True)
+                st.markdown(
+                    f"**{row.filename}**: [Link]({row.link})", 
+                    unsafe_allow_html=True
+                )
             with col2:
-                if st.button("✏️ Edit", key=f"edit_{row.id}"):
+                if st.button("✏️ Edit", key=f"editbtn_{row.id}"):
                     edit_link_modal(row.id, row.filename, row.link)
             with col3:
-                if st.button("🗑️ Delete", key=f"del_{row.id}"):
+                if st.button("🗑️ Delete", key=f"deletebtn_{row.id}"):
                     cursor.execute("DELETE FROM file_links WHERE id = ?", (row.id,))
                     conn.commit()
                     st.success("Deleted entry.")
                     st.rerun()
 
     conn.close()
+
+# @st.dialog("Add File Link Entry")
+# def add_link_modal():
+#     conn = sqlite3.connect(SQLITE_FILENAME)
+#     cursor = conn.cursor()
+
+#     filename = st.text_input("File Name", key="dialog_filename")
+#     file_link = st.text_input("File Link (URL)", key="dialog_file_link")
+
+#     col1, col2 = st.columns(2)
+#     with col1:
+#         if st.button("Add"):
+#             if filename and file_link:
+#                 cursor.execute(
+#                     "INSERT INTO file_links (filename, link) VALUES (?, ?)",
+#                     (filename, file_link)
+#                 )
+#                 conn.commit()
+#                 conn.close()
+#                 st.success(f"Added '{filename}' to the list.")
+#                 st.rerun()
+#             else:
+#                 st.error("Please fill in both fields.")
+
+#     with col2:
+#         if st.button("Cancel"):
+#             st.rerun()
+
+# @st.dialog("✏️ Edit File Link Entry")
+# def edit_link_modal(row_id: int, current_filename: str, current_link: str):
+#     conn = sqlite3.connect(SQLITE_FILENAME)
+#     cursor = conn.cursor()
+#     new_filename = st.text_input("File Name", value=current_filename, key=f"edit_fn_{row_id}")
+#     new_link     = st.text_input("File Link (URL)", value=current_link,  key=f"edit_lk_{row_id}")
+#     if st.button("Save"):
+#         if new_filename and new_link:
+#             cursor.execute(
+#                 "UPDATE file_links SET filename = ?, link = ? WHERE id = ?",
+#                 (new_filename, new_link, row_id)
+#             )
+#             conn.commit()
+#             conn.close()
+#             st.success("Entry updated.")
+#             st.rerun()
+#         else:
+#             st.error("Please fill both fields.")
+#     if st.button("Cancel"):
+#         conn.close()
+#         st.rerun()
+
+
+# def list_tab():
+#     conn = sqlite3.connect(SQLITE_FILENAME)
+#     cursor = conn.cursor()
+#     cursor.execute("""
+#         CREATE TABLE IF NOT EXISTS file_links (
+#             id INTEGER PRIMARY KEY AUTOINCREMENT,
+#             filename TEXT NOT NULL,
+#             link TEXT NOT NULL
+#         )
+#     """)
+#     conn.commit()
+
+#     # Add button
+#     if st.button("➕ Add File Link"):
+#         add_link_modal()
+
+#     # Search bar
+#     search_term = st.text_input("🔍 Search File List", key="search")
+
+#     # Fetch data including id
+#     df_links = pd.read_sql(
+#         "SELECT id, filename, link FROM file_links ORDER BY id DESC", conn
+#     )
+
+#     st.markdown("### 📄 File List")
+#     if df_links.empty:
+#         st.info("No entries yet.")
+#     else:
+#         # Apply search filter
+#         if search_term:
+#             mask = df_links.astype(str).apply(
+#                 lambda row: row.str.contains(search_term, case=False, na=False), axis=1
+#             ).any(axis=1)
+#             df_links = df_links[mask]
+
+#         # Display each row with Edit/Delete buttons
+#         for row in df_links.itertuples():
+#             col1, col2, col3 = st.columns([4,1,1])
+#             with col1:
+#                 st.markdown(f"**{row.filename}**: [Link]({row.link})", unsafe_allow_html=True)
+#             with col2:
+#                 if st.button("✏️ Edit", key=f"edit_{row.id}"):
+#                     edit_link_modal(row.id, row.filename, row.link)
+#             with col3:
+#                 if st.button("🗑️ Delete", key=f"del_{row.id}"):
+#                     cursor.execute("DELETE FROM file_links WHERE id = ?", (row.id,))
+#                     conn.commit()
+#                     st.success("Deleted entry.")
+#                     st.rerun()
+
+#     conn.close()
 
 # def list_tab():
 #     conn = sqlite3.connect(SQLITE_FILENAME)
