@@ -327,15 +327,7 @@ def view_tab():
 
             if not df.empty:
                 st.markdown(f"### Preview of `{selected_table}`")
-
-                gb = GridOptionsBuilder.from_dataframe(df)
-                gb.configure_pagination(paginationAutoPageSize=True)
-                gb.configure_default_column(editable=False, groupable=True)
-                gb.configure_side_bar()  
-                gridOptions = gb.build()
-
-                AgGrid(df, gridOptions=gridOptions, enable_enterprise_modules=False, fit_columns_on_grid_load=True)
-
+                st.dataframe(df)
             else:
                 st.info(f"No data found in `{selected_table}`.")
         except Exception as e:
@@ -344,6 +336,50 @@ def view_tab():
             conn.close()
 
     st.divider()
+
+
+# def view_tab():
+#     st.subheader("View SQLite Database")
+
+#     conn = sqlite3.connect(SQLITE_FILENAME)
+#     cursor = conn.cursor()
+
+#     # Fetch all table names
+#     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+#     tables = [table[0] for table in cursor.fetchall()]
+#     conn.close()
+
+#     if not tables:
+#         st.info("No tables found in the database.")
+#         return
+
+#     selected_table = st.selectbox("Select a table to view:", tables)
+
+#     if selected_table:
+#         conn = sqlite3.connect(SQLITE_FILENAME)
+
+#         try:
+#             df = pd.read_sql(f"SELECT * FROM '{selected_table}'", conn)
+
+#             if not df.empty:
+#                 st.markdown(f"### Preview of `{selected_table}`")
+
+#                 gb = GridOptionsBuilder.from_dataframe(df)
+#                 gb.configure_pagination(paginationAutoPageSize=True)
+#                 gb.configure_default_column(editable=False, groupable=True)
+#                 gb.configure_side_bar()  
+#                 gridOptions = gb.build()
+
+#                 AgGrid(df, gridOptions=gridOptions, enable_enterprise_modules=False, fit_columns_on_grid_load=True)
+
+#             else:
+#                 st.info(f"No data found in `{selected_table}`.")
+#         except Exception as e:
+#             st.error(f"Error loading table {selected_table}: {str(e)}")
+#         finally:
+#             conn.close()
+
+#     st.divider()
     
 def export_database_modal():
     password = st.text_input("Password", type="password", key="export_pw")

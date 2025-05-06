@@ -5,4 +5,3 @@ Office365-REST-Python-Client
 streamlit-option-menu
 xlsxwriter
 pdfkit
-st-aggrid
