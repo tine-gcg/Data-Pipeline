@@ -124,6 +124,27 @@ def add_link_modal():
         if st.button("Cancel"):
             st.rerun()
 
+@st.dialog("✏️ Edit File Link Entry")
+def edit_link_modal(row_id: int, current_filename: str, current_link: str):
+    conn = sqlite3.connect(SQLITE_FILENAME)
+    cursor = conn.cursor()
+    new_filename = st.text_input("File Name", value=current_filename, key=f"edit_fn_{row_id}")
+    new_link     = st.text_input("File Link (URL)", value=current_link,  key=f"edit_lk_{row_id}")
+    if st.button("Save"):
+        if new_filename and new_link:
+            cursor.execute(
+                "UPDATE file_links SET filename = ?, link = ? WHERE id = ?",
+                (new_filename, new_link, row_id)
+            )
+            conn.commit()
+            conn.close()
+            st.success("Entry updated.")
+            st.rerun()
+        else:
+            st.error("Please fill both fields.")
+    if st.button("Cancel"):
+        conn.close()
+        st.rerun()
 
 
 def list_tab():
@@ -138,40 +159,92 @@ def list_tab():
     """)
     conn.commit()
 
+    # Add button
     if st.button("➕ Add File Link"):
         add_link_modal()
 
-    with st.container(border=True):        
-        search_term = st.text_input("### Search File List")
+    # Search bar
+    search_term = st.text_input("🔍 Search File List", key="search")
 
-    with st.container(border=True):
-        st.markdown("### File List")
+    # Fetch data including id
+    df_links = pd.read_sql(
+        "SELECT id, filename, link FROM file_links ORDER BY id DESC", conn
+    )
 
-        df_links = pd.read_sql("SELECT filename, link FROM file_links ORDER BY id DESC", conn)
+    st.markdown("### 📄 File List")
+    if df_links.empty:
+        st.info("No entries yet.")
+    else:
+        # Apply search filter
+        if search_term:
+            mask = df_links.astype(str).apply(
+                lambda row: row.str.contains(search_term, case=False, na=False), axis=1
+            ).any(axis=1)
+            df_links = df_links[mask]
 
-        if df_links.empty:
-            st.info("No entries yet.")
-        else:
-            # Filter if search term is entered
-            if search_term:
-                df_links = df_links[
-                    df_links.astype(str).apply(
-                        lambda row: row.str.contains(search_term, case=False, na=False), axis=1
-                    ).any(axis=1)
-                ]
-
-            df_links_display = df_links.copy()
-            df_links_display["link"] = df_links_display["link"].apply(
-                lambda url: f"[Link]({url})"
-            )
-
-            # Display with numbering and clickable links
-            for idx, row in enumerate(df_links_display.itertuples(index=False), start=1):
-                st.markdown(f"{idx}. **{row.filename}**: {row.link}", unsafe_allow_html=True)
-
-            st.caption(f"Showing {len(df_links)} entr{'y' if len(df_links)==1 else 'ies'}")
+        # Display each row with Edit/Delete buttons
+        for row in df_links.itertuples():
+            col1, col2, col3 = st.columns([4,1,1])
+            with col1:
+                st.markdown(f"**{row.filename}**: [Link]({row.link})", unsafe_allow_html=True)
+            with col2:
+                if st.button("✏️ Edit", key=f"edit_{row.id}"):
+                    edit_link_modal(row.id, row.filename, row.link)
+            with col3:
+                if st.button("🗑️ Delete", key=f"del_{row.id}"):
+                    cursor.execute("DELETE FROM file_links WHERE id = ?", (row.id,))
+                    conn.commit()
+                    st.success("Deleted entry.")
+                    st.rerun()
 
     conn.close()
+
+# def list_tab():
+#     conn = sqlite3.connect(SQLITE_FILENAME)
+#     cursor = conn.cursor()
+#     cursor.execute("""
+#         CREATE TABLE IF NOT EXISTS file_links (
+#             id INTEGER PRIMARY KEY AUTOINCREMENT,
+#             filename TEXT NOT NULL,
+#             link TEXT NOT NULL
+#         )
+#     """)
+#     conn.commit()
+
+#     if st.button("➕ Add File Link"):
+#         add_link_modal()
+
+#     with st.container(border=True):        
+#         search_term = st.text_input("### Search File List")
+
+#     with st.container(border=True):
+#         st.markdown("### File List")
+
+#         df_links = pd.read_sql("SELECT filename, link FROM file_links ORDER BY id DESC", conn)
+
+#         if df_links.empty:
+#             st.info("No entries yet.")
+#         else:
+#             # Filter if search term is entered
+#             if search_term:
+#                 df_links = df_links[
+#                     df_links.astype(str).apply(
+#                         lambda row: row.str.contains(search_term, case=False, na=False), axis=1
+#                     ).any(axis=1)
+#                 ]
+
+#             df_links_display = df_links.copy()
+#             df_links_display["link"] = df_links_display["link"].apply(
+#                 lambda url: f"[Link]({url})"
+#             )
+
+#             # Display with numbering and clickable links
+#             for idx, row in enumerate(df_links_display.itertuples(index=False), start=1):
+#                 st.markdown(f"{idx}. **{row.filename}**: {row.link}", unsafe_allow_html=True)
+
+#             st.caption(f"Showing {len(df_links)} entr{'y' if len(df_links)==1 else 'ies'}")
+
+#     conn.close()
 
 def convert_tab():
     st.subheader("Convert Excel to SQLite")
