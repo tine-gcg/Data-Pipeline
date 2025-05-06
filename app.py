@@ -68,9 +68,9 @@ def transform_and_load_to_sqlite(excel_file, SQLITE_FILENAME):
         table_name = f"{base_filename_clean}_{sheet_name_clean}"
 
         # Clean column names
-        df.columns = [col.strip() for col in df.columns]    # Step 1: strip spaces
-        df.columns = deduplicate_columns(df.columns)        # Step 2: deduplicate duplicates
-        df.columns = [clean_name(col) for col in df.columns] # Step 3: clean special characters
+        df.columns = [col.strip() for col in df.columns]    
+        df.columns = deduplicate_columns(df.columns)        
+        df.columns = [clean_name(col) for col in df.columns]
 
         df.dropna(how='all', inplace=True)
         df["row_hash"] = df.apply(generate_row_hash, axis=1)
@@ -95,6 +95,36 @@ def upload_sqlite_to_sharepoint(site_url, folder_url, db_path, username, passwor
             st.success(f"Uploaded {name} to SharePoint.")
     else:
         print("Authentication failed.")
+ 
+
+@st.dialog("Add File Link Entry")
+def add_link_modal():
+    conn = sqlite3.connect(SQLITE_FILENAME)
+    cursor = conn.cursor()
+
+    filename = st.text_input("File Name", key="dialog_filename")
+    file_link = st.text_input("File Link (URL)", key="dialog_file_link")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Add"):
+            if filename and file_link:
+                cursor.execute(
+                    "INSERT INTO file_links (filename, link) VALUES (?, ?)",
+                    (filename, file_link)
+                )
+                conn.commit()
+                conn.close()
+                st.success(f"Added '{filename}' to the list.")
+                st.rerun()
+            else:
+                st.error("Please fill in both fields.")
+
+    with col2:
+        if st.button("Cancel"):
+            st.rerun()
+
+
 
 def list_tab():
     conn = sqlite3.connect(SQLITE_FILENAME)
@@ -108,28 +138,38 @@ def list_tab():
     """)
     conn.commit()
 
-    with st.container(border=True):
-        st.markdown("### ➕ Add File Link Entry")
-        filename = st.text_input("File Name")
-        file_link = st.text_input("File Link (URL)")
+    if st.button("➕ Add File Link"):
+        add_link_modal()
 
-        if st.button("Add to List"):
-            if filename and file_link:
-                cursor.execute("INSERT INTO file_links (filename, link) VALUES (?, ?)", (filename, file_link))
-                conn.commit()
-                st.success(f"Added '{filename}' to the list.")
-                st.rerun()
-            else:
-                st.error("Please fill in both the file name and link.")
+    with st.container(border=True):        
+        search_term = st.text_input("### Search File List")
 
     with st.container(border=True):
         st.markdown("### File List")
 
         df_links = pd.read_sql("SELECT filename, link FROM file_links ORDER BY id DESC", conn)
+
         if df_links.empty:
             st.info("No entries yet.")
         else:
-            st.dataframe(df_links, use_container_width=True)
+            # Filter if search term is entered
+            if search_term:
+                df_links = df_links[
+                    df_links.astype(str).apply(
+                        lambda row: row.str.contains(search_term, case=False, na=False), axis=1
+                    ).any(axis=1)
+                ]
+
+            df_links_display = df_links.copy()
+            df_links_display["link"] = df_links_display["link"].apply(
+                lambda url: f"[Link]({url})"
+            )
+
+            # Display with numbering and clickable links
+            for idx, row in enumerate(df_links_display.itertuples(index=False), start=1):
+                st.markdown(f"{idx}. **{row.filename}**: {row.link}", unsafe_allow_html=True)
+
+            st.caption(f"Showing {len(df_links)} entr{'y' if len(df_links)==1 else 'ies'}")
 
     conn.close()
 
@@ -287,7 +327,6 @@ def append_excel_to_sqlite(conn):
                 upload_sqlite_to_sharepoint(SITE_URL, FOLDER_PATH, SQLITE_FILENAME, USERNAME, PASSWORD)
                 st.success(f"Uploaded `{SQLITE_FILENAME}` to SharePoint.")
 
-
 def combine_tab():
     mode = st.radio("Select action", ["Combine Two Excel Files", "Combine Excel to Existing Table"])
     
@@ -302,40 +341,53 @@ def combine_tab():
         conn.close()
 
 def view_tab():
-    st.subheader("View SQLite Database")
+    st.subheader("View & Edit SQLite Database")
 
+    # 1️⃣ List available tables
     conn = sqlite3.connect(SQLITE_FILENAME)
-    cursor = conn.cursor()
-
-    # Fetch all table names
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-    tables = [table[0] for table in cursor.fetchall()]
+    tables = pd.read_sql(
+        "SELECT name FROM sqlite_master WHERE type='table';", 
+        conn
+    )["name"].tolist()
     conn.close()
 
     if not tables:
         st.info("No tables found in the database.")
         return
 
-    selected_table = st.selectbox("Select a table to view:", tables)
+    selected_table = st.selectbox("Select a table to view/edit:", tables)
+    if not selected_table:
+        return
 
-    if selected_table:
+    # 2️⃣ Load data
+    conn = sqlite3.connect(SQLITE_FILENAME)
+    df = pd.read_sql(f"SELECT * FROM '{selected_table}'", conn)
+    conn.close()
+
+    if df.empty:
+        st.info(f"No data found in `{selected_table}`.")
+        return
+
+    st.markdown(f"#### Editing `{selected_table}`")
+
+    # 3️⃣ Render editable grid
+    edited_df = st.data_editor(
+        df,
+        num_rows="dynamic",       # allow users to add/remove rows
+        use_container_width=True  
+    )
+
+    # 4️⃣ Save changes back to SQLite
+    if st.button("💾 Save Changes"):
         conn = sqlite3.connect(SQLITE_FILENAME)
-
-        try:
-            df = pd.read_sql(f"SELECT * FROM '{selected_table}'", conn)
-
-            if not df.empty:
-                st.markdown(f"### Preview of `{selected_table}`")
-                st.dataframe(df)
-            else:
-                st.info(f"No data found in `{selected_table}`.")
-        except Exception as e:
-            st.error(f"Error loading table {selected_table}: {str(e)}")
-        finally:
-            conn.close()
-
-    st.divider()
-
+        edited_df.to_sql(
+            selected_table,
+            conn,
+            if_exists="replace",   # overwrite the old table
+            index=False
+        )
+        conn.close()
+        st.success(f"Changes saved to `{selected_table}`.")
 
 # def view_tab():
 #     st.subheader("View SQLite Database")
@@ -361,16 +413,8 @@ def view_tab():
 #             df = pd.read_sql(f"SELECT * FROM '{selected_table}'", conn)
 
 #             if not df.empty:
-#                 st.markdown(f"### Preview of `{selected_table}`")
-
-#                 gb = GridOptionsBuilder.from_dataframe(df)
-#                 gb.configure_pagination(paginationAutoPageSize=True)
-#                 gb.configure_default_column(editable=False, groupable=True)
-#                 gb.configure_side_bar()  
-#                 gridOptions = gb.build()
-
-#                 AgGrid(df, gridOptions=gridOptions, enable_enterprise_modules=False, fit_columns_on_grid_load=True)
-
+#                 st.markdown(f"#### Preview of `{selected_table}`")
+#                 st.dataframe(df)
 #             else:
 #                 st.info(f"No data found in `{selected_table}`.")
 #         except Exception as e:
@@ -552,8 +596,8 @@ def manage_tab_contents():
             delete_database_modal()
         if st.button("Delete File Link Table"):
             delete_table_modal("file_links")
-    
-def main():
+
+def show_main_content():
     selected = option_menu( 
         menu_title=None, 
         options=["List","Convert", "Combine", "View", "Manage"],
@@ -562,7 +606,7 @@ def main():
         default_index=0,  
         orientation="horizontal"
     )  
-    
+
     if selected == "List":  
         list_tab()
     elif selected == "Convert":
@@ -572,10 +616,31 @@ def main():
     elif selected == "View":
         view_tab()
     elif selected == "Manage":
-       manage_tab() 
+        manage_tab() 
+
+def login_page():
+    st.title("Secure Access")
+    password = st.text_input("Enter password", type="password")
+    if st.button("Login"):
+        if password == MANAGE_DB:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Incorrect password. Please try again.")
+
+def main():
+    st.set_page_config(page_title="SQLite Database Manager", layout="wide")
+
+    # Initialize authentication flag
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    if st.session_state.authenticated:
+        show_main_content()
+    else:
+        login_page()
        
 if __name__ == "__main__":
-    st.set_page_config(page_title="SQLite Database Manager", layout="wide")
     main()
     
     
