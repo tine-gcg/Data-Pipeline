@@ -149,62 +149,6 @@ def edit_link_modal(row_id: int, current_filename: str, current_link: str):
             conn.close()
             st.rerun()
 
-# def list_tab():
-#     conn = sqlite3.connect(SQLITE_FILENAME)
-#     cursor = conn.cursor()
-#     cursor.execute("""
-#         CREATE TABLE IF NOT EXISTS file_links (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             filename TEXT NOT NULL,
-#             link TEXT NOT NULL
-#         )
-#     """)
-#     conn.commit()
-
-#     # Add button
-#     if st.button("➕ Add File Link", key="add_link_main"):
-#         add_link_modal()
-
-#     # Search bar
-#     search_term = st.text_input("🔍 Search File List", key="search")
-
-#     # Fetch data including id
-#     df_links = pd.read_sql(
-#         "SELECT id, filename, link FROM file_links ORDER BY id DESC", conn
-#     )
-
-#     st.markdown("### 📄 File List")
-#     if df_links.empty:
-#         st.info("No entries yet.")
-#     else:
-#         # Apply search filter
-#         if search_term:
-#             mask = df_links.astype(str).apply(
-#                 lambda row: row.str.contains(search_term, case=False, na=False),
-#                 axis=1
-#             ).any(axis=1)
-#             df_links = df_links[mask]
-
-#         # Display each row with Edit/Delete buttons
-#         for row in df_links.itertuples():
-#             col1, col2, col3 = st.columns([4,1,1])
-#             with col1:
-#                 st.markdown(
-#                     f"**{row.filename}**: [Link]({row.link})", 
-#                     unsafe_allow_html=True
-#                 )
-#             with col2:
-#                 if st.button("✏️ Edit", key=f"editbtn_{row.id}"):
-#                     edit_link_modal(row.id, row.filename, row.link)
-#             with col3:
-#                 if st.button("🗑️ Delete", key=f"deletebtn_{row.id}"):
-#                     cursor.execute("DELETE FROM file_links WHERE id = ?", (row.id,))
-#                     conn.commit()
-#                     st.success("Deleted entry.")
-#                     st.rerun()
-
-#     conn.close()
-
 @st.dialog("🔒 Enter Admin Mode")
 def enter_admin_mode():
     pw = st.text_input("Password", type="password", key="admin_pw")
@@ -281,155 +225,6 @@ def list_tab():
                         st.rerun()
 
     conn.close()
-
-# @st.dialog("Add File Link Entry")
-# def add_link_modal():
-#     conn = sqlite3.connect(SQLITE_FILENAME)
-#     cursor = conn.cursor()
-
-#     filename = st.text_input("File Name", key="dialog_filename")
-#     file_link = st.text_input("File Link (URL)", key="dialog_file_link")
-
-#     col1, col2 = st.columns(2)
-#     with col1:
-#         if st.button("Add"):
-#             if filename and file_link:
-#                 cursor.execute(
-#                     "INSERT INTO file_links (filename, link) VALUES (?, ?)",
-#                     (filename, file_link)
-#                 )
-#                 conn.commit()
-#                 conn.close()
-#                 st.success(f"Added '{filename}' to the list.")
-#                 st.rerun()
-#             else:
-#                 st.error("Please fill in both fields.")
-                                                              
-#     with col2:
-#         if st.button("Cancel"):
-#             st.rerun()
-
-# @st.dialog("✏️ Edit File Link Entry")
-# def edit_link_modal(row_id: int, current_filename: str, current_link: str):
-#     conn = sqlite3.connect(SQLITE_FILENAME)
-#     cursor = conn.cursor()
-#     new_filename = st.text_input("File Name", value=current_filename, key=f"edit_fn_{row_id}")
-#     new_link     = st.text_input("File Link (URL)", value=current_link,  key=f"edit_lk_{row_id}")
-#     if st.button("Save"):
-#         if new_filename and new_link:
-#             cursor.execute(
-#                 "UPDATE file_links SET filename = ?, link = ? WHERE id = ?",
-#                 (new_filename, new_link, row_id)
-#             )
-#             conn.commit()
-#             conn.close()
-#             st.success("Entry updated.")
-#             st.rerun()
-#         else:
-#             st.error("Please fill both fields.")
-#     if st.button("Cancel"):
-#         conn.close()
-#         st.rerun()
-
-
-# def list_tab():
-#     conn = sqlite3.connect(SQLITE_FILENAME)
-#     cursor = conn.cursor()
-#     cursor.execute("""
-#         CREATE TABLE IF NOT EXISTS file_links (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             filename TEXT NOT NULL,
-#             link TEXT NOT NULL
-#         )
-#     """)
-#     conn.commit()
-
-#     # Add button
-#     if st.button("➕ Add File Link"):
-#         add_link_modal()
-
-#     # Search bar
-#     search_term = st.text_input("🔍 Search File List", key="search")
-
-#     # Fetch data including id
-#     df_links = pd.read_sql(
-#         "SELECT id, filename, link FROM file_links ORDER BY id DESC", conn
-#     )
-
-#     st.markdown("### 📄 File List")
-#     if df_links.empty:
-#         st.info("No entries yet.")
-#     else:
-#         # Apply search filter
-#         if search_term:
-#             mask = df_links.astype(str).apply(
-#                 lambda row: row.str.contains(search_term, case=False, na=False), axis=1
-#             ).any(axis=1)
-#             df_links = df_links[mask]
-
-#         # Display each row with Edit/Delete buttons
-#         for row in df_links.itertuples():
-#             col1, col2, col3 = st.columns([4,1,1])
-#             with col1:
-#                 st.markdown(f"**{row.filename}**: [Link]({row.link})", unsafe_allow_html=True)
-#             with col2:
-#                 if st.button("✏️ Edit", key=f"edit_{row.id}"):
-#                     edit_link_modal(row.id, row.filename, row.link)
-#             with col3:
-#                 if st.button("🗑️ Delete", key=f"del_{row.id}"):
-#                     cursor.execute("DELETE FROM file_links WHERE id = ?", (row.id,))
-#                     conn.commit()
-#                     st.success("Deleted entry.")
-#                     st.rerun()
-
-#     conn.close()
-
-# def list_tab():
-#     conn = sqlite3.connect(SQLITE_FILENAME)
-#     cursor = conn.cursor()
-#     cursor.execute("""
-#         CREATE TABLE IF NOT EXISTS file_links (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             filename TEXT NOT NULL,
-#             link TEXT NOT NULL
-#         )
-#     """)
-#     conn.commit()
-
-#     if st.button("➕ Add File Link"):
-#         add_link_modal()
-
-#     with st.container(border=True):        
-#         search_term = st.text_input("### Search File List")
-
-#     with st.container(border=True):
-#         st.markdown("### File List")
-
-#         df_links = pd.read_sql("SELECT filename, link FROM file_links ORDER BY id DESC", conn)
-
-#         if df_links.empty:
-#             st.info("No entries yet.")
-#         else:
-#             # Filter if search term is entered
-#             if search_term:
-#                 df_links = df_links[
-#                     df_links.astype(str).apply(
-#                         lambda row: row.str.contains(search_term, case=False, na=False), axis=1
-#                     ).any(axis=1)
-#                 ]
-
-#             df_links_display = df_links.copy()
-#             df_links_display["link"] = df_links_display["link"].apply(
-#                 lambda url: f"[Link]({url})"
-#             )
-
-#             # Display with numbering and clickable links
-#             for idx, row in enumerate(df_links_display.itertuples(index=False), start=1):
-#                 st.markdown(f"{idx}. **{row.filename}**: {row.link}", unsafe_allow_html=True)
-
-#             st.caption(f"Showing {len(df_links)} entr{'y' if len(df_links)==1 else 'ies'}")
-
-#     conn.close()
 
 def convert_tab():
     st.subheader("Convert Excel to SQLite")
@@ -646,41 +441,6 @@ def view_tab():
         )
         conn.close()
         st.success(f"Changes saved to `{selected_table}`.")
-
-# def view_tab():
-#     st.subheader("View SQLite Database")
-
-#     conn = sqlite3.connect(SQLITE_FILENAME)
-#     cursor = conn.cursor()
-
-#     # Fetch all table names
-#     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-#     tables = [table[0] for table in cursor.fetchall()]
-#     conn.close()
-
-#     if not tables:
-#         st.info("No tables found in the database.")
-#         return
-
-#     selected_table = st.selectbox("Select a table to view:", tables)
-
-#     if selected_table:
-#         conn = sqlite3.connect(SQLITE_FILENAME)
-
-#         try:
-#             df = pd.read_sql(f"SELECT * FROM '{selected_table}'", conn)
-
-#             if not df.empty:
-#                 st.markdown(f"#### Preview of `{selected_table}`")
-#                 st.dataframe(df)
-#             else:
-#                 st.info(f"No data found in `{selected_table}`.")
-#         except Exception as e:
-#             st.error(f"Error loading table {selected_table}: {str(e)}")
-#         finally:
-#             conn.close()
-
-#     st.divider()
     
 def export_database_modal():
     password = st.text_input("Password", type="password", key="export_pw")
@@ -708,7 +468,6 @@ def export_database_modal():
             )
         else:
             st.error("Incorrect password.")
-            
             
 @st.dialog("Export File Links")
 def export_file_links_modal():
@@ -877,14 +636,32 @@ def show_main_content():
         manage_tab() 
 
 def login_page():
-    st.title("Secure Access")
-    password = st.text_input("Enter password", type="password")
-    if st.button("Login"):
-        if password == MANAGE_DB:
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("Incorrect password. Please try again.")
+    # st.markdown("## ", unsafe_allow_html=True)
+
+    # Use columns to center the card
+    col_left, col_center, col_right = st.columns([1, 2, 1])
+    with col_center:
+        with st.container(border=True):
+            st.markdown("<h3 style='text-align: center;'>Welcome</h3>", unsafe_allow_html=True)
+
+            col1 = st.columns(1)[0]
+            with col1:
+                password = st.text_input("Password", type="password", key="login_pw")
+            
+            if st.button("Login", use_container_width=True):
+                if st.session_state.login_pw == MANAGE_DB:
+                    st.session_state.authenticated = True
+                    st.session_state.login_attempts = 0
+                    st.success("Access granted.")
+                    st.rerun()
+                else:
+                    st.session_state.login_attempts += 1
+                    st.error("❌ Incorrect password.")
+                    if st.session_state.login_attempts >= 3:
+                        st.warning("Too many failed attempts. Please wait or contact the administrator.")
+
+    # Footer
+    st.markdown("<div style='text-align: center;'>© 2025 Business Intelligence Group. All rights reserved.</div>", unsafe_allow_html=True)
 
 def main():
     st.set_page_config(page_title="SQLite Database Manager", layout="wide")
@@ -900,5 +677,6 @@ def main():
        
 if __name__ == "__main__":
     main()
+    
     
     
